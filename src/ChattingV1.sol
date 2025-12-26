@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.30;
 
-contract Chatting {
+contract ChattingV1 {
     struct Room {
         address[4] users;
         uint256 usersCount;
@@ -9,15 +9,14 @@ contract Chatting {
         uint256 messageId;
     }
 
-    mapping(address => uint256) private _chatIdByUser;
-    // mapping(uint256 =>mapping(address => bool)) private isUserInRoom;
+    mapping(address => uint256) private _userChatId;
+    mapping(uint256 => mapping(address => bool)) private _isUserInRoom;
 
     uint256 private _chatId;
     mapping(uint256 => Room) private _chatByRoom;
 
     error AddressAlreadyChatting();
     error AddressDidntJoinChatYet();
-    error ChatAlreadyCreated();
     error ChatAlreadyClosed();
     error InvalidChatId();
     error RoomIsFull();
@@ -33,12 +32,10 @@ contract Chatting {
         uint256 indexed messageId
     );
 
-
     modifier notInChat() {
-        require(_chatIdByUser[msg.sender] == 0, AddressAlreadyChatting());
+        require(_userChatId[msg.sender] == 0, AddressAlreadyChatting());
         _;
     }
-
 
     function createChatRoom() external notInChat {
         _increaseChatId();
@@ -51,8 +48,7 @@ contract Chatting {
 
     function sendMessage(string memory _message) external {
         uint256 chatIdByUser = _chatIdByUser[msg.sender];
-        require(chatIdByUser > 0, AddressDidntJoinChatYet());
-        require(_isUserInChatRoom() == true, AddressDidntJoinChatYet());
+        require(_isUserInRoom[chatIdByUser][msg.sender] == true, AddressDidntJoinChatYet());
         require(_chatByRoom[chatIdByUser].status == true, ChatAlreadyClosed());
 
         require(
@@ -72,9 +68,11 @@ contract Chatting {
     }
 
     function leaveChatRoom() external {
+
         require(_chatIdByUser[msg.sender] > 0, AddressDidntJoinChatYet());
 
         uint256 userJoinedChatId = _chatIdByUser[msg.sender];
+
         Room storage room = _chatByRoom[userJoinedChatId];
         for (uint256 i = 0; i < room.usersCount; i++) {
             if (room.users[i] == msg.sender) {
@@ -82,16 +80,14 @@ contract Chatting {
                 delete room.users[room.usersCount - 1];
                 room.usersCount -= 1;
                 _chatIdByUser[msg.sender] = 0;
+                _isUserInRoom[userJoinedChatId][msg.sender] = false;
                 return;
             }
         }
         revert AddressDidntJoinChatYet();
     }
 
-
-
-
-    // ================================================Служебные функции======================
+    // =====================private functions===============
 
     function _increaseChatId() private {
         ++_chatId;
@@ -104,6 +100,7 @@ contract Chatting {
         room.usersCount++;
 
         _chatIdByUser[msg.sender] = _chatId;
+        _isUserInRoom[_chatId][msg.sender] = true;
 
         emit ChatCreated(msg.sender, _chatId);
     }
@@ -120,18 +117,8 @@ contract Chatting {
         room.users[room.usersCount] = msg.sender;
         room.usersCount++;
 
+        _isUserInRoom[chatId][msg.sender] = true;
+
         emit JoinedChat(msg.sender, chatId);
-    }
-
-    function _isUserInChatRoom() private view returns (bool) {
-        uint256 userInChatRoomId = _chatIdByUser[msg.sender];
-        Room storage room = _chatByRoom[userInChatRoomId];
-
-        for (uint256 i = 0; i < room.usersCount; i++) {
-            if (room.users[i] == msg.sender) {
-                return true;
-            }
-        }
-        return false;
     }
 }
